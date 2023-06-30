@@ -46,14 +46,14 @@ int main(int argc, char *argv[]) {
   if (f_starv != 0) printf("Flag starvation attivato\n");
 
 
-    //creazione semafori
+    //creazione semafori per le forchette
     for (int i = 1; i <= n_filosofi; i++){
         if((forchetta = sem_open((char)i, O_CREAT, S_IRWXU, 0)) == SEM_FAILED){
         printf("Errore in sem_open, errno = %d\n", errno);
         exit(EXIT_FAILURE);
     }
     }
-    
+
     for (int i = 1; i <= n_filosofi; i++) {
         pid_t pid = fork();
 

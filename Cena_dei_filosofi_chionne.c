@@ -1,3 +1,4 @@
+#include <bits/pthreadtypes.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <semaphore.h>
@@ -10,7 +11,8 @@
 #include <time.h>
 #include <unistd.h>
 
-
+int n_filosofi;
+sem_t forchetta[0];
 
 void SigIntHandler(int iSignalCode) {
   printf("Handler: ricevuto signal %d. %s\n", iSignalCode,
@@ -18,32 +20,44 @@ void SigIntHandler(int iSignalCode) {
   return;
 }
 
-void mangia(sem_t *forchetta[], int i /*id filosofo*/, int n_filosofi) {
-  while (1) {
+void prendi_forchetta(int i){
+    printf("Filosofo %d: ho preso la forchetta %d\n", i, i);
+    sem_wait(&forchetta[i]);
+    printf("Filosofo %d: ho preso la forchetta %d\n", i, (i + 1) % n_filosofi);
+    sem_wait(&forchetta[(i + 1) % n_filosofi]);
+}
 
-    printf("Filosofo %d: sto per prendere la forchetta destra %d\n", i, i);
-    sem_wait(forchetta[i]);
-    printf("Filosofo %d: sto per prendere la forchetta sinistra %d\n", i,
-           (i + 1) % n_filosofi);
-    sem_wait(forchetta[(i + 1) % n_filosofi]);
+void lascia_forchetta(int i){
+    printf("Filosofo %d: ho lasciato la forchetta %d\n", i, i);
+    sem_post(&forchetta[i]);
+    printf("Filosofo %d: ho lasciato la forchetta %d\n", i, (i + 1) % n_filosofi);
+    sem_post(&forchetta[(i + 1) % n_filosofi]);
+}
+
+
+void filosofo(int i /*id filosofo*/, int n_filosofi) {
+  while (1) {
 
     struct timespec tempo;
     tempo.tv_sec = 8;     // secondi
-    tempo.tv_nsec = 8000; // nanosecondi (0.5 secondi)
+    tempo.tv_nsec = 50000000; // nanosecondi 
+    if (nanosleep(&tempo, NULL) == -1) {
+      perror("nanosleep");
+      exit(EXIT_FAILURE);
+    }
     printf("Sto mangiando...\n");
-    int risultato = nanosleep(&tempo, NULL);
-    if (risultato == -1) {
+
+    printf("Filosofo %d: sto per prendere le forchette\n", i);
+    prendi_forchetta(i);
+
+    if (nanosleep(&tempo, NULL) == -1) {
       perror("nanosleep");
       exit(EXIT_FAILURE);
     }
 
-    sem_post(forchetta[i]);
-    printf("Filosofo %d: ho lasciato la forchetta destra %d\n", i, i);
-    sem_post(forchetta[(i + 1) % n_filosofi]);
-    printf("Filosofo %d: ho lasciato la forchetta sinistra %d\n", i, (i + 1) % n_filosofi);
+    lascia_forchetta(i);
+    printf("Filosofo %d: Ho finito di mangiare\n", i);
   }
-
-  return;
 }
 
 int main(int argc, char *argv[]) {
@@ -59,7 +73,7 @@ int main(int argc, char *argv[]) {
     printf("Numero di filosofi -> %s\n", argv[1]);
   }
 
-  int n_filosofi = atoi(argv[1]);
+  n_filosofi = atoi(argv[1]);
   // printf("%d\n", n_filosofi);
 
   if (n_filosofi < 3) {
@@ -87,19 +101,18 @@ int main(int argc, char *argv[]) {
 
   // creazione semafori per le forchette
   // creo un array di forchette (semafori)
-  sem_t *forchetta[n_filosofi];
-  char nome[n_filosofi][10];
+
   for (int i = 0; i < n_filosofi; i++) {
 
-    sprintf(nome[i], "%d", i);
+    //sprintf(nome[i], "%d", i);
 
-    if ((forchetta[i] = sem_open(nome[i], O_CREAT, S_IRWXU, 1)) == SEM_FAILED) {
-      printf("Errore in sem_open, errno = %d\n", errno);
+    if ((sem_init(&forchetta[i], 1 /* 0 se condiviso tra thread, 1 tra processi*/, 1 /*sem start value*/)) == -1) {
+      printf("Errore in sem_init, errno = %d\n", errno);
       exit(EXIT_FAILURE);
     }
 
-    
   }
+
 
   for (int i = 0; i < n_filosofi; i++) {
     pid_t pid = fork();
@@ -111,20 +124,21 @@ int main(int argc, char *argv[]) {
     } else if (pid == 0) {
       // child
       printf("Sono il filosofo numero: %d\n", i);
-      mangia(forchetta, i, n_filosofi);
+      filosofo(i, n_filosofi);
       exit(0);
 
     } else {
 
-      // parent
-      waitpid(pid, NULL, 0);
-
-      for (i = 0; i < n_filosofi; i++) {
-        sem_close(forchetta[i]);
-        sem_unlink(nome[i]);
-      }
+        // parent
+        //int wstatus;
+        //wait(&wstatus);
     }
   }
 
-  return 0;
+    for (int i = 0; i < n_filosofi; i++){
+        int wstatus;
+        wait(&wstatus);
+        sem_destroy(&forchetta[i]);
+    }
+    return 0;
 }

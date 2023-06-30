@@ -53,6 +53,7 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
     }
+    
     for (int i = 1; i <= n_filosofi; i++) {
         pid_t pid = fork();
 

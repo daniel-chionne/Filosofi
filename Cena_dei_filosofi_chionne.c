@@ -11,8 +11,6 @@
 #include <time.h>
 #include <unistd.h>
 
-int n_filosofi;
-sem_t forchetta[0];
 
 void SigIntHandler(int iSignalCode) {
   printf("Handler: ricevuto signal %d. %s\n", iSignalCode,
@@ -20,7 +18,7 @@ void SigIntHandler(int iSignalCode) {
   return;
 }
 
-void prendi_forchetta(int i){
+/*void prendi_forchetta(int i){
     printf("Filosofo %d: ho preso la forchetta %d\n", i, i);
     sem_wait(&forchetta[i]);
     printf("Filosofo %d: ho preso la forchetta %d\n", i, (i + 1) % n_filosofi);
@@ -32,31 +30,33 @@ void lascia_forchetta(int i){
     sem_post(&forchetta[i]);
     printf("Filosofo %d: ho lasciato la forchetta %d\n", i, (i + 1) % n_filosofi);
     sem_post(&forchetta[(i + 1) % n_filosofi]);
-}
+}*/
 
 
-void filosofo(int i /*id filosofo*/, int n_filosofi) {
+void filosofo(int i /*id filosofo*/, sem_t *forchetta_dx, sem_t *forchetta_sx, int n_filosofi) {
   while (1) {
 
     struct timespec tempo;
     tempo.tv_sec = 8;     // secondi
-    tempo.tv_nsec = 50000000; // nanosecondi 
+    tempo.tv_nsec = 0; // nanosecondi 
+
+    printf("Filosofo %d, prendo la forchetta %d\n", i, i);
+    sem_wait(forchetta_dx);
+    printf("Filosofo %d, prendo la forchetta %d\n", i, (i+1)%n_filosofi);
+    sem_wait(forchetta_sx);
+
+
+    printf("Filosofo %d: mangio...\n", i);
+
     if (nanosleep(&tempo, NULL) == -1) {
       perror("nanosleep");
       exit(EXIT_FAILURE);
     }
-    printf("Sto mangiando...\n");
 
-    printf("Filosofo %d: sto per prendere le forchette\n", i);
-    prendi_forchetta(i);
+    sem_post(forchetta_dx);
+    sem_post(forchetta_sx);
 
-    if (nanosleep(&tempo, NULL) == -1) {
-      perror("nanosleep");
-      exit(EXIT_FAILURE);
-    }
-
-    lascia_forchetta(i);
-    printf("Filosofo %d: Ho finito di mangiare\n", i);
+    printf("Filosofo %d: ho finito di mangiare\n", i);
   }
 }
 
@@ -68,18 +68,18 @@ int main(int argc, char *argv[]) {
   sa.sa_handler = SigIntHandler;
   sigaction(SIGINT, &sa, NULL);
 
-  if (argc <= 2) { // perchè il primo è il nome dell'eseguibile e il secondo è
-                   // il primo argomento
+
+  if (argc <= 2) { // perchè il primo è il nome dell'eseguibile e il secondo è il primo argomento
     printf("Numero di filosofi -> %s\n", argv[1]);
   }
 
-  n_filosofi = atoi(argv[1]);
-  // printf("%d\n", n_filosofi);
+  int n_filosofi = atoi(argv[1]);
 
-  if (n_filosofi < 3) {
+  if (n_filosofi < 2) {
     printf("pochi filosofi a cena\n");
   }
 
+/*
   // Inizializzazione dei flags
   int f_stallo = 0;
   int f_starv = 0;
@@ -98,47 +98,50 @@ int main(int argc, char *argv[]) {
     printf("Flag soluzione stallo attivato\n");
   if (f_starv != 0)
     printf("Flag starvation attivato\n");
+*/
 
-  // creazione semafori per le forchette
-  // creo un array di forchette (semafori)
 
+  sem_t forchetta[n_filosofi];
+  pid_t filosofi[n_filosofi];
+
+  //creazione delle forchette
   for (int i = 0; i < n_filosofi; i++) {
-
-    //sprintf(nome[i], "%d", i);
-
     if ((sem_init(&forchetta[i], 1 /* 0 se condiviso tra thread, 1 tra processi*/, 1 /*sem start value*/)) == -1) {
       printf("Errore in sem_init, errno = %d\n", errno);
-      exit(EXIT_FAILURE);
+      exit(1);
     }
-
   }
 
-
+  //creazione dei filosofi
   for (int i = 0; i < n_filosofi; i++) {
-    pid_t pid = fork();
+    filosofi[i] = fork();
 
-    if (pid == -1) {
+    if (filosofi[i] == -1) {
       perror("Errore in fork\n");
       exit(EXIT_FAILURE);
 
-    } else if (pid == 0) {
+    } else if (filosofi[i] == 0) {
       // child
       printf("Sono il filosofo numero: %d\n", i);
-      filosofo(i, n_filosofi);
+      int dx = i;
+      int sx = (i+1)%n_filosofi;
+
+      sleep(i);
+      filosofo(i, &forchetta[dx], &forchetta[sx], n_filosofi);
       exit(0);
 
     } else {
-
-        // parent
-        //int wstatus;
-        //wait(&wstatus);
+      
     }
   }
 
     for (int i = 0; i < n_filosofi; i++){
         int wstatus;
-        wait(&wstatus);
+        waitpid(filosofi[i], &wstatus, 0);
+    }
+
+    for (int i = 0; i < n_filosofi; i++){
         sem_destroy(&forchetta[i]);
     }
-    return 0;
+    return 0;   
 }

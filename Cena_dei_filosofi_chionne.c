@@ -7,6 +7,15 @@
 
 sem_t *forchetta;
 
+void mangia(){
+    while(1){
+        //prendi la forchetta destra
+        printf("filosofo %d: ho preso la forchetta destra", getpid());
+        //prendi la forchetta destra
+        printf("filosofo %d: ho preso la forchetta sinistra", getpid());
+    }
+}
+
 int main(int argc, char *argv[]) {
 
   if (argc <= 2) { // perchè il primo è il nome dell'eseguibile e il secondo è
@@ -36,38 +45,41 @@ int main(int argc, char *argv[]) {
   if (f_sol != 0) printf("Flag soluzione stallo attivato\n");
   if (f_starv != 0) printf("Flag starvation attivato\n");
 
-  //creazione delle forchette
 
-
-  for (int i = 1; i <= n_filosofi; i++) {
-    pid_t pid = fork();
-
-    if (pid == -1) {
-      perror("Errore in fork\n");
-      exit(EXIT_FAILURE);
-
-    }else if (pid == 0) {
-        // child
-        printf("Sono primo filosofo numero: %d\n", getpid());
-        //prendi la forchetta a destra se libera
-        //poi prendi la forchetta sinistra se libera
-        //se entrambe sono libere, mangia  
-        exit(0);
-
-    } else {
-
-        // parent
-        int wstatus;
-        wait(&wstatus); // se commentate questa riga il child sarà "zombie"
-        if (WIFEXITED(wstatus))
-            printf("Il filosofo ha finito di mangiare. Exit status = %d\n", WEXITSTATUS(wstatus));
-        else
-            printf("Il child NON ha finito di mangiare!!!\n");
-
-        printf("Saluti dal salotto del capo. Capo pid = %d\n", getppid());
-        fflush(stdout);
+    //creazione semafori
+    for (int i = 1; i <= n_filosofi; i++){
+        if((forchetta = sem_open((char)i, O_CREAT, S_IRWXU, 0)) == SEM_FAILED){
+        printf("Errore in sem_open, errno = %d\n", errno);
+        exit(EXIT_FAILURE);
     }
-  }
+    }
+    for (int i = 1; i <= n_filosofi; i++) {
+        pid_t pid = fork();
+
+        if (pid == -1) {
+        perror("Errore in fork\n");
+        exit(EXIT_FAILURE);
+
+        }else if (pid == 0) {
+            // child
+            printf("Sono primo filosofo numero: %d\n", getpid());
+            
+            exit(0);
+
+        } else {
+
+            // parent
+            int wstatus;
+            wait(&wstatus); // se commentate questa riga il child sarà "zombie"
+            if (WIFEXITED(wstatus))
+                printf("Il filosofo ha finito di mangiare. Exit status = %d\n", WEXITSTATUS(wstatus));
+            else
+                printf("Il child NON ha finito di mangiare!!!\n");
+
+            printf("Saluti dal salotto del capo. Capo pid = %d\n", getppid());
+            fflush(stdout);
+        }
+    }
 
   return 0;
 }

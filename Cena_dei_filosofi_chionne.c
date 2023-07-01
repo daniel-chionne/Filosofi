@@ -13,22 +13,22 @@
 
 void togli_forchette();
 void SigIntHandler(int iSignalCode);
-void filosofo(int i, sem_t *forchetta[], int n_filosofi);
+void filosofo(int i, sem_t *forchetta[]);
 
 int n_filosofi;
 sem_t *forchetta[3];
-int i;
-char nome[20];
+char nome[20][10];
 
 struct sigaction sa;
+struct timespec tempo;
 
 int fd[2];
 int cont_stallo;
 
 // Inizializzazione dei flags
-int f_stallo = 0;
-int f_starv = 0;
-int f_sol = 0;
+int f_stallo;
+int f_starv;
+int f_sol;
 
 void SigIntHandler(int iSignalCode) {
   //printf("Handler: ricevuto signal %d. %s\n.", iSignalCode,strsignal(iSignalCode));
@@ -36,20 +36,11 @@ void SigIntHandler(int iSignalCode) {
   return;
 }
 
-void SigAlarmHandler(int iSignalCode) {
-    printf("RILEVATO DEADLOCK\n");
-    exit(0);
-}
 
-
-void mangia(int i /*identificatore del filosofo*/, sem_t *forchetta[], int n_filosofi){
-    struct timespec tempo;
-    tempo.tv_sec = 0;     // secondi
+void filosofo(int i /*identificatore del filosofo*/, sem_t *forchetta[]) {
+  while (1) {
+    tempo.tv_sec = 0;   // secondi
     tempo.tv_nsec = 8; // nanosecondi 
-    
-    //signal(SIGALRM, gestore_segnale);
-    //sa.sa_handler = SigAlarmHandler;
-    //sigaction(SIGALRM, &sa, NULL);
 
     printf("Filosofo %d, ATTENDO la forchetta destra %d\n", i, i);
     sem_wait(forchetta[i]);
@@ -60,26 +51,29 @@ void mangia(int i /*identificatore del filosofo*/, sem_t *forchetta[], int n_fil
 
     
     printf("Filosofo %d: mangio...\n", i);
-    
-    if (nanosleep(&tempo, NULL) == -1) {
-      perror("nanosleep");
-      exit(EXIT_FAILURE);
-    }
-    return;
+    nanosleep(&tempo, NULL);
+
+    sem_post(forchetta[i]);
+    printf("Filosofo %d, RILASCIO la forchetta %d\n", i, i);
+    sem_post(forchetta[(i+1)%n_filosofi]);
+    printf("Filosofo %d, RILASCIO la forchetta %d\n", i, (i+1)%n_filosofi);    
+  }
 }
 
-void mangia_con_stallo(int i /*identificatore del filosofo*/, sem_t *forchetta[], int n_filosofi){
-    struct timespec tempo;
-    tempo.tv_sec = 0;     // secondi
+void filosofo_con_stallo(int i /*identificatore del filosofo*/, sem_t *forchetta[]) {
+  while (1) {
+    tempo.tv_sec = 0;   // secondi
     tempo.tv_nsec = 8; // nanosecondi 
 
     printf("Filosofo %d, ATTENDO la forchetta destra %d\n", i, i);
     sem_wait(forchetta[i]);
     printf("Filosofo %d, PRENDO la forchetta destra %d\n", i, i);
+    fflush(stdout);
+
+    sleep(3); //favorisce lo stallo
+
     printf("Filosofo %d, ATTENDO la forchetta sinistra %d\n", i, (i+1)%n_filosofi);
-    sem_wait(forchetta[(i+1)%n_filosofi]);
-    printf("Filosofo %d, PRENDO la forchetta sinistra %d\n", i, (i+1)%n_filosofi);
-    
+
     read(fd[0], &cont_stallo, sizeof(int));
     cont_stallo++;
     write(fd[1], &cont_stallo, sizeof(int));
@@ -88,38 +82,18 @@ void mangia_con_stallo(int i /*identificatore del filosofo*/, sem_t *forchetta[]
         kill(0, SIGINT); //uccido i processi
     }
 
+    sem_wait(forchetta[(i+1)%n_filosofi]);
+    printf("Filosofo %d, PRENDO la forchetta sinistra %d\n", i, (i+1)%n_filosofi);
+
     
     printf("Filosofo %d: mangio...\n", i);
-    
-    if (nanosleep(&tempo, NULL) == -1) {
-      perror("nanosleep");
-      exit(EXIT_FAILURE);
-    }
-    return;
-}
+    nanosleep(&tempo, NULL);
 
-void lascia_forchetta(int i /*identificatore del filosofo*/, sem_t *forchetta[], int n_filosofi){
-    printf("Filosofo %d, RILASCIO la forchetta %d\n", i, i);
     sem_post(forchetta[i]);
-    printf("Filosofo %d, RILASCIO la forchetta %d\n", i, (i+1)%n_filosofi);
+    printf("Filosofo %d, RILASCIO la forchetta %d\n", i, i);
     sem_post(forchetta[(i+1)%n_filosofi]);
-    
-    return;
-}
-
-void filosofo(int i /*identificatore del filosofo*/, sem_t *forchetta[], int n_filosofi) {
-  while (1) {
-      
-    if (f_stallo != 0){ //castistica di rilevazione stallo 
-        mangia_con_stallo(i, forchetta, n_filosofi);
-    }
-    mangia(i, forchetta, n_filosofi);
-
-    lascia_forchetta(i, forchetta, n_filosofi);
-    printf("Filosofo %d: ho finito di mangiare\n", i);
-    
+    printf("Filosofo %d, RILASCIO la forchetta %d\n", i, (i+1)%n_filosofi);    
   }
-  
 }
 
 int main(int argc, char *argv[]) {
@@ -140,9 +114,10 @@ int main(int argc, char *argv[]) {
     printf("pochi filosofi a cena\n");
   }
 
-
-  if (argv[2] != NULL)
+  if (argv[2] != NULL) {
     f_stallo = atoi(argv[2]);
+    //printf("%d\n", f_stallo);
+  }
   if (argv[3] != NULL)
     f_sol = atoi(argv[3]);
   if (argv[4] != NULL)
@@ -157,18 +132,17 @@ int main(int argc, char *argv[]) {
 
 
   //creazione delle forchette
-  for (i = 0; i < n_filosofi; i++) {
+  for (int i = 0; i < n_filosofi; i++) {
     
-    sprintf(nome, "%d", i);
+    sprintf(nome[i], "%d", i);
     
-    if ((forchetta[i] = sem_open(nome, O_CREAT, S_IRWXU, 1)) == SEM_FAILED) {
+    if ((forchetta[i] = sem_open(nome[i], O_CREAT, S_IRWXU, 1)) == SEM_FAILED) {
       printf("Errore in sem_open, errno = %d\n", errno);
       exit(EXIT_FAILURE);
     }
   }
   
   pid_t filosofi[n_filosofi]; //gruppo di filosofi a cena
-  
   
   //CREAZIONE PIPE PER LA RILEVAZIONE DI STALLO 
   cont_stallo = 0;
@@ -180,7 +154,7 @@ int main(int argc, char *argv[]) {
   
 
   //creazione dei filosofi
-  for (i = 0; i < n_filosofi; i++) {
+  for (int i = 0; i < n_filosofi; i++) {
     filosofi[i] = fork();
 
     if (filosofi[i] == -1) {
@@ -190,18 +164,19 @@ int main(int argc, char *argv[]) {
     } else if (filosofi[i] == 0) {
       // child
       printf("Sono il filosofo numero: %d\n", i);
-      filosofo(i, forchetta, n_filosofi);
+      if (f_stallo != 0){
+        filosofo_con_stallo(i, forchetta);
+      }
+      filosofo(i, forchetta);
       exit(0); //terminazione processo
-    } else {
-        
     }
   }
   
-    for (i = 0; i < n_filosofi; i++){
-        wait(NULL);
+    for (int i = 0; i < n_filosofi; i++){
+        waitpid(filosofi[i], NULL, 0);
     }
     
-    togli_forchette(); //metodo di rimozione delle forchette (semafori)
+    //togli_forchette(); //metodo di rimozione delle forchette (semafori)
     
     //Messaggi signal (per evitare che venga chiamato esmplicitamente tante volte quanti sono i processi)
     printf("Handler: ricevuto signal di Interrupt\n");
@@ -214,7 +189,7 @@ int main(int argc, char *argv[]) {
 void togli_forchette(){
     for (int i = 0; i < n_filosofi; i++){
         sem_close(forchetta[i]);
-        sem_unlink(nome);
+        sem_unlink(nome[i]);
     }
     return;
 }

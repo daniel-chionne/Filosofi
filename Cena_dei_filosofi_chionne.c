@@ -114,10 +114,8 @@ int main(int argc, char *argv[]) {
     printf("pochi filosofi a cena\n");
   }
 
-  if (argv[2] != NULL) {
+  if (argv[2] != NULL)
     f_stallo = atoi(argv[2]);
-    //printf("%d\n", f_stallo);
-  }
   if (argv[3] != NULL)
     f_sol = atoi(argv[3]);
   if (argv[4] != NULL)
@@ -154,7 +152,13 @@ int main(int argc, char *argv[]) {
   
 
   //creazione dei filosofi
-  for (int i = 0; i < n_filosofi; i++) {
+  if (f_sol != 0){
+    /*
+    APPROCCIO PER LA SOLUZIONE DELLO STALLO
+    Date n forchette, mi creo n-1 filosofi in modo tale che uno di essi riesce
+    ad avere entrambe le forchette, mangiare e lasciarle e così via per gli altri
+    */
+    for (int i = 0; i < n_filosofi-1; i++) {
     filosofi[i] = fork();
 
     if (filosofi[i] == -1) {
@@ -169,6 +173,25 @@ int main(int argc, char *argv[]) {
       }
       filosofo(i, forchetta);
       exit(0); //terminazione processo
+      }
+    } 
+  } else {
+      for (int i = 0; i < n_filosofi; i++) {
+      filosofi[i] = fork();
+
+      if (filosofi[i] == -1) {
+        perror("Errore in fork\n");
+        exit(EXIT_FAILURE);
+
+      } else if (filosofi[i] == 0) {
+        // child
+        printf("Sono il filosofo numero: %d\n", i);
+        if (f_stallo != 0){
+          filosofo_con_stallo(i, forchetta);
+        }
+        filosofo(i, forchetta);
+        exit(0); //terminazione processo
+      }
     }
   }
   

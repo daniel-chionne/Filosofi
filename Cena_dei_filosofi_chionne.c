@@ -151,8 +151,8 @@ int main(int argc, char *argv[]) {
   write(fd[1], &cont_stallo, sizeof(int));
   
 
-  //creazione dei filosofi
-  if (f_sol != 0){
+  //CREAZIONE DEI FILOSOFI
+  if (f_sol != 0){ //nel caso in cui il flag è attivato
     /*
     APPROCCIO PER LA SOLUZIONE DELLO STALLO
     Date n forchette, mi creo n-1 filosofi in modo tale che uno di essi riesce

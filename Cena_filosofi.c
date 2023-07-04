@@ -45,9 +45,8 @@ void SigIntHandler(int iSignalCode) {
 
 void SigAlarmHandler(int iSignalCode){
     printf(ANSI_COLOR_RED "STARVATION RILEVATA DA FILOSOFO CON PID %d\n" ANSI_COLOR_RESET, getpid()); 
-    //signal(SIGINT, SigIntHandler);
     for (int i = 0; i < n_filosofi; i++){
-      kill(filosofi[i], SIGINT); //uccido i processi
+      kill(filosofi[i], SIGINT); //chiude i processi figli
     }
 }
 
@@ -85,11 +84,10 @@ void mangia(int i /*identificatore del filosofo*/, sem_t *forchetta[]) {
 
     printf("Filosofo %d: ATTENDO la forchetta %d\n", i, destra);
     if (f_starv){
-        alarm(8); //viene attivato un tempo di 8 secondi
+        alarm(8); //viene attivato un tempo di 8 secondi. Utilezzato per sfruttare la funzione semwait() ed avere una soluzione più snella 
     }
     sem_wait(forchetta[destra]);
     alarm(0); //se il processo non riesce a bloccare l'alarm a causa del semaforo scatta starvation 
-    nanosleep(&tempo, NULL);
     printf("Filosofo %d: PRENDO la forchetta %d\n", i, destra);
 
     nanosleep(&tempo, NULL); //favorisce lo stallo
@@ -99,22 +97,21 @@ void mangia(int i /*identificatore del filosofo*/, sem_t *forchetta[]) {
     //porzione che rileva lo stallo in caso in cui il flag stallo è attivo
     if (f_stallo){
         read(fd[0], &cont_stallo, sizeof(int));
-        cont_stallo++; //fino a che non prendo la forchetta destra segnalo il rischio di stallo
+        cont_stallo++; //fino a che non prendo la forchetta sinistra segnalo il rischio di stallo
         write(fd[1], &cont_stallo, sizeof(int));
         if(cont_stallo == n_filosofi){
             printf(ANSI_COLOR_RED "STALLO RILEVATO\n" ANSI_COLOR_RESET);
             for (int i = 0; i < n_filosofi; i++){
-              kill(filosofi[i], SIGINT); //uccido i processi
+              kill(filosofi[i], SIGINT); //chiude i processi figli
             }
         }
     }
 
     if (f_starv){
-        alarm(8); //viene attivato un tempo di 8 secondi
+        alarm(8); //viene attivato un tempo di 8 secondi. Utilezzato per sfruttare la funzione semwait() ed avere una soluzione più snella 
     }
     sem_wait(forchetta[sinistra]);
     alarm(0); //se il processo non riesce a bloccare l'alarm a causa del semaforo scatta starvation
-    nanosleep(&tempo, NULL);
     printf("Filosofo %d: PRENDO la forchetta %d\n", i, sinistra);
 
     //porzione che rileva lo stallo in caso in cui il flag stallo è attivo
@@ -168,7 +165,7 @@ int main(int argc, char *argv[]) {
   //creazione delle forchette
   for (int i = 0; i < n_filosofi; i++) {
     
-    sprintf(nome[i], "%d", i);
+    sprintf(nome[i], "%d", i); //scrive l'intero i e lo salva nel buffer nome[i]
     
     if ((forchetta[i] = sem_open(nome[i], O_CREAT, S_IRWXU, 1)) == SEM_FAILED) {
       printf("Errore in sem_open, errno = %d\n", errno);
@@ -176,9 +173,8 @@ int main(int argc, char *argv[]) {
     }
   }
   
-  //filosofi[n_filosofi]; //gruppo di filosofi a cena
   
-  //CREAZIONE PIPE PER LA RILEVAZIONE DI STALLO
+  //CREAZIONE PIPE PER LA RILEVAZIONE DI STALLO 
   if (f_stallo){
     cont_stallo = 0; //contatore utile per i processi per la segnalazione di eventuale stallo
     if (pipe(fd) == -1){
@@ -191,7 +187,7 @@ int main(int argc, char *argv[]) {
     
   //creazione dei filosofi mediante processi figli
   for (int i = 0; i < n_filosofi; i++) {
-    filosofi[i] = fork();
+    filosofi[i] = fork(); 
 
     if (filosofi[i] == -1) {
       perror("Errore in fork\n");

@@ -120,9 +120,9 @@ void mangia(int i /*identificatore del filosofo*/, sem_t *forchetta[]) {
     //porzione che rileva lo stallo in caso in cui il flag stallo è attivo
     //prevenzione dello stallo -> se riesco a prendere la forchetta sinistra decremento il contatore 
     if (f_stallo){
-        read(fd[0], &cont_stallo, sizeof(int));
-        cont_stallo--; //se ho preso entrambe le forchette il rischio di stallo non si verifica 
-        write(fd[1], &cont_stallo, sizeof(int));
+      read(fd[0], &cont_stallo, sizeof(int));
+      cont_stallo--; //se ho preso entrambe le forchette il rischio di stallo non si verifica 
+      write(fd[1], &cont_stallo, sizeof(int));
     }
     
     printf("Filosofo %d: mangio...\n", i);
@@ -218,5 +218,5 @@ int main(int argc, char *argv[]) {
   printf("Tolte le %d forchette dalla tavola\n", n_filosofi);
   printf("Tutti i %d filosofi se ne sono andati\n", n_filosofi);
 
-  exit(0);
+  return 0;
 }

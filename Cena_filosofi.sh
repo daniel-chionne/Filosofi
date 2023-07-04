@@ -2,6 +2,8 @@
 
 file=Cena_filosofi.c
 
+chmod 777 "$file"
+
 if test -f $file 
 then
     echo -e "File esistente\n\n"
@@ -24,4 +26,4 @@ else
     echo "File non esistente"
 fi
 
-exit 0
+exit 1

@@ -12,6 +12,9 @@
 #include <time.h>
 #include <unistd.h>
 
+#define ANSI_COLOR_RED     "\x1b[31m"
+#define ANSI_COLOR_RESET   "\x1b[0m"
+
 void sparecchia();
 void SigIntHandler(int iSignalCode);
 void mangia(int i, sem_t *forchetta[]);
@@ -25,7 +28,6 @@ char nome[20][10];
 struct sigaction sa;
 struct sigaction sa2;
 struct timespec tempo;
-struct timespec ts; //uilizzata per rilevare starvation
 
 int fd[2];
 int cont_stallo;
@@ -42,14 +44,18 @@ void SigIntHandler(int iSignalCode) {
 }
 
 void SigAlarmHandler(int iSignalCode){
-    printf("RILEVATA STARVATION\n");
+    printf(ANSI_COLOR_RED "STARVATION RILEVATA DA FILOSOFO CON PID %d\n" ANSI_COLOR_RESET, getpid()); 
     //signal(SIGINT, SigIntHandler);
-    kill(0, SIGINT);
+    for (int i = 0; i < n_filosofi; i++){
+      kill(filosofi[i], SIGINT); //uccido i processi
+    }
 }
 
 void sparecchia(){
+  //chiusura dei file descriptor di lettura e scrittura
   close(fd[0]);
   close(fd[1]);
+  //chiusura dei semafori
   for (int i = 0; i < n_filosofi; i++){
     sem_close(forchetta[i]);
     sem_unlink(nome[i]);
@@ -60,11 +66,12 @@ void sparecchia(){
 //FUNZIONE COMPORTAMENTO FILOSOFO
 void mangia(int i /*identificatore del filosofo*/, sem_t *forchetta[]) {
 
+  //valori di base assegnati alle forchette
   int destra = i;
   int sinistra = (i+1)%n_filosofi;
 
   //SOLUZIONE ALLO STALLO
-  if (f_sol != 0){
+  if (f_sol){
     if (i == n_filosofi - 1){
       // l'ultimo filosofo inverte l’ordine di presa delle forchette
       destra = (i+1)%n_filosofi;
@@ -76,16 +83,12 @@ void mangia(int i /*identificatore del filosofo*/, sem_t *forchetta[]) {
     tempo.tv_sec = 0;   // secondi
     tempo.tv_nsec = 100000000; // nanosecondi 
 
-    //conta 8 secondi dal tempo corrente
-    clock_gettime(CLOCK_REALTIME, &ts);
-    ts.tv_sec += 8;
-
     printf("Filosofo %d: ATTENDO la forchetta %d\n", i, destra);
-    if (f_starv != 0){
-        alarm(8);
+    if (f_starv){
+        alarm(8); //viene attivato un tempo di 8 secondi
     }
     sem_wait(forchetta[destra]);
-    alarm(0);
+    alarm(0); //se il processo non riesce a bloccare l'alarm a causa del semaforo scatta starvation 
     printf("Filosofo %d: PRENDO la forchetta %d\n", i, destra);
 
     nanosleep(&tempo, NULL); //favorisce lo stallo
@@ -93,29 +96,30 @@ void mangia(int i /*identificatore del filosofo*/, sem_t *forchetta[]) {
     printf("Filosofo %d: ATTENDO la forchetta %d\n", i, sinistra);
 
     //porzione che rileva lo stallo in caso in cui il flag stallo è attivo
-    if (f_stallo != 0){
+    if (f_stallo){
         read(fd[0], &cont_stallo, sizeof(int));
-        cont_stallo++;
+        cont_stallo++; //fino a che non prendo la forchetta destra segnalo il rischio di stallo
         write(fd[1], &cont_stallo, sizeof(int));
         if(cont_stallo == n_filosofi){
-            printf("STALLO RILEVATO\n");
-            for (int i = 0; i < n_filosofi; i++)
-            kill(filosofi[i], SIGINT); //uccido i processi
+            printf(ANSI_COLOR_RED "STALLO RILEVATO\n" ANSI_COLOR_RESET);
+            for (int i = 0; i < n_filosofi; i++){
+              kill(filosofi[i], SIGINT); //uccido i processi
+            }
         }
     }
 
-    if (f_starv != 0){
-        alarm(8);
+    if (f_starv){
+        alarm(8); //viene attivato un tempo di 8 secondi
     }
     sem_wait(forchetta[sinistra]);
-    alarm(0);
+    alarm(0); //se il processo non riesce a bloccare l'alarm a causa del semaforo scatta starvation
     printf("Filosofo %d: PRENDO la forchetta %d\n", i, sinistra);
 
     //porzione che rileva lo stallo in caso in cui il flag stallo è attivo
     //prevenzione dello stallo -> se riesco a prendere la forchetta sinistra decremento il contatore 
-    if (f_stallo != 0){
+    if (f_stallo){
         read(fd[0], &cont_stallo, sizeof(int));
-        cont_stallo--;
+        cont_stallo--; //se ho preso entrambe le forchette il rischio di stallo non si verifica 
         write(fd[1], &cont_stallo, sizeof(int));
     }
     
@@ -133,12 +137,12 @@ void mangia(int i /*identificatore del filosofo*/, sem_t *forchetta[]) {
 int main(int argc, char *argv[]) {
 
   // segnali
-    memset(&sa, '\0', sizeof(struct sigaction)); //mettiamo 0 tutti i campi di sigaction (la struttura) per evitare che ci siano dati di memoria scritti
-    memset(&sa2, '\0', sizeof(struct sigaction));
-    sa.sa_handler = SigIntHandler;
-    sa2.sa_handler = SigAlarmHandler;
-    sigaction(SIGINT, &sa, NULL);
-    sigaction(SIGALRM, &sa2, NULL);
+  memset(&sa, '\0', sizeof(struct sigaction)); //mettiamo 0 tutti i campi di sigaction (la struttura) per evitare che ci siano dati di memoria scritti
+  memset(&sa2, '\0', sizeof(struct sigaction));
+  sa.sa_handler = SigIntHandler;
+  sa2.sa_handler = SigAlarmHandler;
+  sigaction(SIGINT, &sa, NULL);
+  sigaction(SIGALRM, &sa2, NULL);
 
   n_filosofi = atoi(argv[1]);
   
@@ -149,19 +153,13 @@ int main(int argc, char *argv[]) {
     printf("Numero di filosofi a cena -> %s\n\n\n", argv[1]);
   }
 
-  if (argv[2] != NULL)
-    f_stallo = atoi(argv[2]);
-  if (argv[3] != NULL)
-    f_sol = atoi(argv[3]);
-  if (argv[4] != NULL)
-    f_starv = atoi(argv[4]);
+  if (argv[2] != NULL) f_stallo = atoi(argv[2]);
+  if (argv[3] != NULL) f_sol = atoi(argv[3]);
+  if (argv[4] != NULL) f_starv = atoi(argv[4]);
 
-  if (f_stallo != 0)
-    printf("Flag stallo attivato\n");
-  if (f_sol != 0)
-    printf("Flag soluzione stallo attivato\n");
-  if (f_starv != 0)
-    printf("Flag starvation attivato\n");
+  if (f_stallo) printf("Flag stallo attivato\n");
+  if (f_sol) printf("Flag soluzione stallo attivato\n");
+  if (f_starv) printf("Flag starvation attivato\n");
   
   printf("\n\n");
 
@@ -179,8 +177,8 @@ int main(int argc, char *argv[]) {
   //filosofi[n_filosofi]; //gruppo di filosofi a cena
   
   //CREAZIONE PIPE PER LA RILEVAZIONE DI STALLO
-  if (f_stallo != 0){
-    cont_stallo = 0;
+  if (f_stallo){
+    cont_stallo = 0; //contatore utile per i processi per la segnalazione di eventuale stallo
     if (pipe(fd) == -1){
       perror("pipe");
       exit(EXIT_FAILURE);
@@ -209,10 +207,9 @@ int main(int argc, char *argv[]) {
   for (int i = 0; i < n_filosofi; i++){
     waitpid(filosofi[i], NULL, 0);
   }
+  
 
-  //sparecchia();
-    
-  printf("\n\nCapo del ristorante: Fine della cena. PID %d\n", getppid());
+  printf(ANSI_COLOR_RESET"\n\nCapo del ristorante: Fine della cena. PID %d\n", getppid());
   for (int i = 0; i < n_filosofi; i++){
     printf("Filosofo %d: mi alzo dalla tavola. PID %d\n", i, filosofi[i]);
   }

@@ -89,6 +89,7 @@ void mangia(int i /*identificatore del filosofo*/, sem_t *forchetta[]) {
     }
     sem_wait(forchetta[destra]);
     alarm(0); //se il processo non riesce a bloccare l'alarm a causa del semaforo scatta starvation 
+    nanosleep(&tempo, NULL);
     printf("Filosofo %d: PRENDO la forchetta %d\n", i, destra);
 
     nanosleep(&tempo, NULL); //favorisce lo stallo
@@ -113,6 +114,7 @@ void mangia(int i /*identificatore del filosofo*/, sem_t *forchetta[]) {
     }
     sem_wait(forchetta[sinistra]);
     alarm(0); //se il processo non riesce a bloccare l'alarm a causa del semaforo scatta starvation
+    nanosleep(&tempo, NULL);
     printf("Filosofo %d: PRENDO la forchetta %d\n", i, sinistra);
 
     //porzione che rileva lo stallo in caso in cui il flag stallo è attivo

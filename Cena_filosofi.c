@@ -38,8 +38,11 @@ int f_stallo;
 int f_starv;
 int f_sol;
 
+//Gli handler sono funzioni chiamate da un segnale, devono essere più semplici possibili
+//la loro chiamata comporta il fallimento di esecuzione di altre system calls ad esempio printf, nanosleep, semitedwait
+//se la loro esecuzione falliscia ritornano un errore in EINTR altrimenti dopo l'handler eventualmente riprendono l'esecuzione
 
-void SigIntHandler(int iSignalCode) {
+void SigIntHandler(int iSignalCode) { 
   sparecchia(); //rimuove le forchette (semafori)
 }
 
@@ -51,13 +54,13 @@ void SigAlarmHandler(int iSignalCode){
 }
 
 void sparecchia(){
-  //chiusura dei file descriptor di lettura e scrittura
+  //chiusura dei file descriptor di lettura e scrittura. importante 
   close(fd[0]);
   close(fd[1]);
   //chiusura dei semafori
   for (int i = 0; i < n_filosofi; i++){
-    sem_close(forchetta[i]);
-    sem_unlink(nome[i]);
+    sem_close(forchetta[i]); //chiude al processo l'accesso al semaforo
+    sem_unlink(nome[i]); //rimuove il semaforo quando nessun processo necessita del suo utilizzo. Se non viene rimosso rimane persistente nel kernel fino alla riaccensione del computer 
   }
   return;
 }
@@ -79,7 +82,7 @@ void mangia(int i /*identificatore del filosofo*/, sem_t *forchetta[]) {
   }
 
   while (1) {
-    tempo.tv_sec = 0;   // secondi
+    tempo.tv_sec = 0;  // secondi 
     tempo.tv_nsec = 100000000; // nanosecondi 
 
     printf("Filosofo %d: ATTENDO la forchetta %d\n", i, destra);
@@ -96,9 +99,9 @@ void mangia(int i /*identificatore del filosofo*/, sem_t *forchetta[]) {
 
     //porzione che rileva lo stallo in caso in cui il flag stallo è attivo
     if (f_stallo){
-        read(fd[0], &cont_stallo, sizeof(int));
+        read(fd[0], &cont_stallo, sizeof(int)); //legge il contenuto di count stallo dal fd di lettura
         cont_stallo++; //fino a che non prendo la forchetta sinistra segnalo il rischio di stallo
-        write(fd[1], &cont_stallo, sizeof(int));
+        write(fd[1], &cont_stallo, sizeof(int)); //scrive il valore della variabile cont_stallo nel file descriptor di scrittura
         if(cont_stallo == n_filosofi){
             printf(ANSI_COLOR_RED "STALLO RILEVATO\n" ANSI_COLOR_RESET);
             for (int i = 0; i < n_filosofi; i++){
@@ -117,9 +120,9 @@ void mangia(int i /*identificatore del filosofo*/, sem_t *forchetta[]) {
     //porzione che rileva lo stallo in caso in cui il flag stallo è attivo
     //prevenzione dello stallo -> se riesco a prendere la forchetta sinistra decremento il contatore 
     if (f_stallo){
-      read(fd[0], &cont_stallo, sizeof(int));
+      read(fd[0], &cont_stallo, sizeof(int)); //legge il contenuto di count stallo dal fd di lettura
       cont_stallo--; //se ho preso entrambe le forchette il rischio di stallo non si verifica 
-      write(fd[1], &cont_stallo, sizeof(int));
+      write(fd[1], &cont_stallo, sizeof(int)); //scrive il valore della variabile cont_stallo nel file descriptor di scrittura
     }
     
     printf("Filosofo %d: mangio...\n", i);
@@ -138,12 +141,12 @@ int main(int argc, char *argv[]) {
   // segnali
   memset(&sa, '\0', sizeof(struct sigaction)); //mettiamo 0 tutti i campi di sigaction (la struttura) per evitare che ci siano dati di memoria scritti
   memset(&sa2, '\0', sizeof(struct sigaction));
-  sa.sa_handler = SigIntHandler;
+  sa.sa_handler = SigIntHandler; //associa un handler alla struttura signaction
   sa2.sa_handler = SigAlarmHandler;
-  sigaction(SIGINT, &sa, NULL);
+  sigaction(SIGINT, &sa, NULL); //serve per variare la gestione di un signal da parte di un processo. Installa un handler al ricevimento del segnale
   sigaction(SIGALRM, &sa2, NULL);
 
-  n_filosofi = atoi(argv[1]);
+  n_filosofi = atoi(argv[1]); //converte una stringa in un intero 
   
   if (n_filosofi < 2) {
     printf("Pochi filosofi a cena. Ce ne devono essere almeno 2\n");
@@ -181,10 +184,10 @@ int main(int argc, char *argv[]) {
       perror("pipe");
       exit(EXIT_FAILURE);
     }
-    write(fd[1], &cont_stallo, sizeof(int));
+    write(fd[1], &cont_stallo, sizeof(int)); //scrive il valore della variabile cont_stallo nel file descriptor di scrittura
   }
+  //i lettori devono chiudere il fd di scrittura, gli scrittori quello di lettura
   
-    
   //creazione dei filosofi mediante processi figli
   for (int i = 0; i < n_filosofi; i++) {
     filosofi[i] = fork(); 
@@ -203,7 +206,7 @@ int main(int argc, char *argv[]) {
 
   //il padre sta in attesa dei filosofi
   for (int i = 0; i < n_filosofi; i++){
-    waitpid(filosofi[i], NULL, 0);
+    waitpid(filosofi[i], NULL, 0); //il padre attende un cambiamento di stato del figlio
   }
   
 
